@@ -1,0 +1,53 @@
+const { Client, GatewayIntentBits } = require("discord.js");
+
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers
+  ]
+});
+
+const PREFIX = "!";
+
+client.on("ready", () => {
+  console.log("Bot online");
+});
+
+client.on("messageCreate", async (message) => {
+  if (message.author.bot) return;
+  if (!message.content.startsWith(PREFIX)) return;
+
+  const args = message.content.slice(PREFIX.length).trim().split(" ");
+  const cmd = args.shift().toLowerCase();
+  const nome = args.join(" ");
+
+  if (!nome) return message.reply("Informe o nome da obra.");
+
+  const guild = message.guild;
+
+  if (cmd === "seguir") {
+    let role = guild.roles.cache.find(r => r.name.toLowerCase() === nome.toLowerCase());
+
+    if (!role) {
+      role = await guild.roles.create({
+        name: nome
+      });
+    }
+
+    await message.member.roles.add(role);
+    message.reply(`Agora você segue: ${role.name}`);
+  }
+
+  if (cmd === "parar") {
+    const role = guild.roles.cache.find(r => r.name.toLowerCase() === nome.toLowerCase());
+
+    if (!role) return message.reply("Obra não encontrada.");
+
+    await message.member.roles.remove(role);
+    message.reply(`Você parou de seguir: ${role.name}`);
+  }
+});
+
+client.login(process.env.TOKEN);
