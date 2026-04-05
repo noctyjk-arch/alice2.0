@@ -53,13 +53,13 @@ async function checkSite() {
 
     // primeira execução (não envia nada)
     if (!inicializado) {
-      recentes.forEach(c => vistos.add(c.link));
+      recentes.forEach(c => vistos.add(c.link + c.numero));
       inicializado = true;
       console.log("Inicializado sem enviar.");
       return;
     }
 
-    const novos = recentes.filter(c => !vistos.has(c.link));
+    const novos = recentes.filter(c => !vistos.has(c.link + c.numero));
 
     if (novos.length > 0) {
       for (const cap of novos) {
@@ -67,15 +67,15 @@ async function checkSite() {
         await axios.post(WEBHOOK_URL, {
           username: "alice",
           content: `📢 Atualização
-Acabou de sair ${cap.numero}
+Acabou de sair o ${cap.numero} da
 Obra: ${cap.nome}
-Leia: ${cap.link}`
+Está disponível para ler em: ${cap.link}`
         });
 
         console.log("Enviado:", cap.nome, cap.numero);
       }
 
-      vistos = new Set(recentes.map(c => c.link));
+      vistos = new Set(recentes.map(c => c.link + c.numero));
     } else {
       console.log("Sem novidades.");
     }
