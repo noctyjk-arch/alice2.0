@@ -52,7 +52,7 @@ client.on("messageCreate", async (message) => {
 });
 
 
-// 🔥 PARTE NOVA — webhook → ping automático
+// 🔥 webhook → ping automático (MODIFICADO)
 client.on("messageCreate", async (message) => {
 
   // só reage a webhook
@@ -77,14 +77,17 @@ client.on("messageCreate", async (message) => {
     });
   }
 
-  // envia mensagem com ping
-  await message.channel.send({
-    content: `<@&${role.id}>
-${content}`
-  });
-
   // apaga mensagem original do webhook
   await message.delete();
+
+  // envia formatado (igual webhook, mas melhor visual)
+  await message.channel.send({
+    content: `<@&${role.id}> 📢 Atualização`,
+    embeds: [{
+      description: content,
+      color: 0xff69b4
+    }]
+  });
 });
 
 client.login(process.env.TOKEN);
