@@ -34,7 +34,7 @@ client.on("ready", () => {
   console.log("Bot online");
 });
 
-// comandos (!seguir / !parar)
+// comandos (!seguir / !parar / !banco)
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
   if (!message.content.startsWith(PREFIX)) return;
@@ -42,11 +42,45 @@ client.on("messageCreate", async (message) => {
   const args = message.content.slice(PREFIX.length).trim().split(" ");
   const cmd = args.shift().toLowerCase();
 
+  const userId = message.author.id;
+
+  // 🔥 COMANDO BANCO (ANTES DE EXIGIR NOME)
+  if (cmd === "banco") {
+
+    if (Object.keys(db).length === 0) {
+      return message.reply("Banco vazio.");
+    }
+
+    let linhas = [];
+
+    for (const [userId, obras] of Object.entries(db)) {
+      linhas.push(`<@${userId}> → ${obras.join(", ")}`);
+    }
+
+    const limite = 1900;
+    let atual = "📂 Banco de Dados:\n\n";
+
+    for (const linha of linhas) {
+      if ((atual + linha + "\n").length > limite) {
+        await message.channel.send(atual);
+        atual = "";
+      }
+      atual += linha + "\n";
+    }
+
+    if (atual.length > 0) {
+      await message.channel.send(atual);
+    }
+
+    console.log("[BANCO CONSULTADO]");
+    return;
+  }
+
+  // resto dos comandos precisa de nome
   const nomeOriginal = args.join(" ").trim();
   if (!nomeOriginal) return message.reply("Informe o nome da obra.");
 
   const nome = nomeOriginal.toLowerCase();
-  const userId = message.author.id;
 
   if (!db[userId]) db[userId] = [];
 
@@ -83,7 +117,6 @@ client.on("messageCreate", async (message) => {
   console.log("[WEBHOOK RECEBIDO]");
   console.log(content);
 
-  // extrai nome da obra
   const match = content.match(/Obra:\s*(.+)/i);
   if (!match) {
     console.log("[ERRO] Não encontrou nome da obra");
@@ -95,17 +128,14 @@ client.on("messageCreate", async (message) => {
 
   console.log("[OBRA DETECTADA]:", nome);
 
-  // encontra seguidores
   const seguidores = Object.entries(db)
     .filter(([id, obras]) => obras.includes(nome))
     .map(([id]) => `<@${id}>`);
 
   console.log("[SEGUIDORES]:", seguidores);
 
-  // apaga mensagem original do webhook
   await message.delete();
 
-  // divide menções
   const chunkSize = 100;
 
   if (seguidores.length > 0) {
