@@ -1,15 +1,27 @@
 const { Client, GatewayIntentBits } = require("discord.js");
+const fs = require("fs");
 
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers
+    GatewayIntentBits.MessageContent
   ]
 });
 
 const PREFIX = "!";
+const DB_FILE = "./db.json";
+
+// carrega banco
+let db = {};
+if (fs.existsSync(DB_FILE)) {
+  db = JSON.parse(fs.readFileSync(DB_FILE));
+}
+
+// salva banco
+function salvarDB() {
+  fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
+}
 
 client.on("ready", () => {
   console.log("Bot online");
@@ -22,40 +34,38 @@ client.on("messageCreate", async (message) => {
 
   const args = message.content.slice(PREFIX.length).trim().split(" ");
   const cmd = args.shift().toLowerCase();
-  const nome = args.join(" ");
 
-  if (!nome) return message.reply("Informe o nome da obra.");
+  const nomeOriginal = args.join(" ").trim();
+  if (!nomeOriginal) return message.reply("Informe o nome da obra.");
 
-  const guild = message.guild;
+  const nome = nomeOriginal.toLowerCase(); // padronizado
+  const userId = message.author.id;
+
+  if (!db[userId]) db[userId] = [];
 
   if (cmd === "seguir") {
-    let role = guild.roles.cache.find(r => r.name.toLowerCase() === nome.toLowerCase());
 
-    if (!role) {
-      role = await guild.roles.create({
-        name: nome
-      });
+    if (!db[userId].includes(nome)) {
+      db[userId].push(nome);
+      salvarDB();
     }
 
-    await message.member.roles.add(role);
-    message.reply(`Agora você segue: ${role.name}`);
+    message.reply(`Agora você segue: ${nomeOriginal}`);
   }
 
   if (cmd === "parar") {
-    const role = guild.roles.cache.find(r => r.name.toLowerCase() === nome.toLowerCase());
 
-    if (!role) return message.reply("Obra não encontrada.");
+    db[userId] = db[userId].filter(o => o !== nome);
+    salvarDB();
 
-    await message.member.roles.remove(role);
-    message.reply(`Você parou de seguir: ${role.name}`);
+    message.reply(`Você parou de seguir: ${nomeOriginal}`);
   }
 });
 
 
-// 🔥 webhook → ping automático (MODIFICADO)
+// 🔥 webhook → ping automático (SEM CARGOS)
 client.on("messageCreate", async (message) => {
 
-  // só reage a webhook
   if (!message.webhookId) return;
 
   const content = message.content;
@@ -64,30 +74,41 @@ client.on("messageCreate", async (message) => {
   const match = content.match(/Obra:\s*(.+)/i);
   if (!match) return;
 
-  const nome = match[1].trim();
-  const guild = message.guild;
+  const nomeOriginal = match[1].trim();
+  const nome = nomeOriginal.toLowerCase();
 
-  // procura cargo
-  let role = guild.roles.cache.find(r => r.name.toLowerCase() === nome.toLowerCase());
-
-  // cria cargo automaticamente se não existir
-  if (!role) {
-    role = await guild.roles.create({
-      name: nome
-    });
-  }
+  // encontra seguidores
+  const seguidores = Object.entries(db)
+    .filter(([id, obras]) => obras.includes(nome))
+    .map(([id]) => `<@${id}>`);
 
   // apaga mensagem original do webhook
   await message.delete();
 
-  // envia formatado (igual webhook, mas melhor visual)
-  await message.channel.send({
-    content: `<@&${role.id}> 📢 Atualização`,
-    embeds: [{
-      description: content,
-      color: 0xff69b4
-    }]
-  });
+  // divide menções (limite ~100)
+  const chunkSize = 100;
+  for (let i = 0; i < seguidores.length; i += chunkSize) {
+    const grupo = seguidores.slice(i, i + chunkSize);
+
+    await message.channel.send({
+      content: `${grupo.join(" ")} 📢 Atualização`,
+      embeds: [{
+        description: content,
+        color: 0xff69b4
+      }]
+    });
+  }
+
+  // se ninguém segue, ainda manda sem ping
+  if (seguidores.length === 0) {
+    await message.channel.send({
+      content: `📢 Atualização`,
+      embeds: [{
+        description: content,
+        color: 0xff69b4
+      }]
+    });
+  }
 });
 
 client.login(process.env.TOKEN);
