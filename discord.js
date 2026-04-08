@@ -58,7 +58,7 @@ client.on("messageCreate", async (message) => {
       console.log(`[SEGUIR] ${userId} -> ${nome}`);
     }
 
-    message.reply(`Agora você segue: ${nomeOriginal}`);
+    message.reply(`MENSAGEM TESTE69: ${nomeOriginal}`);
   }
 
   if (cmd === "parar") {
