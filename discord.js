@@ -9,10 +9,10 @@ const client = new Client({
   ]
 });
 
-// 🔥 SUPABASE
+// 🔥 SUPABASE (CORRIGIDO)
 const supabase = createClient(
   "https://lttoegjwxfsrbpuoisth.supabase.co",
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx0dG9lZ2p3eGZzcmJwdW9pc3RoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU3NjM3MjgsImV4cCI6MjA5MTMzOTcyOH0.-FhWETCsx0DNx3Y_xOg-VOUP5fiCgldAF2K1KfGcOlA"
+  "sb_publishable_ysy_mhKL5nlgbpku8ZMjvg_fH8lEaQQ"
 );
 
 const PREFIX = "!";
@@ -51,7 +51,7 @@ async function parar(userId, nome) {
     .eq("obra", nome);
 }
 
-// 🔥 BOT
+// 🔥 BOT PRINCIPAL
 client.on("messageCreate", async (message) => {
 
   if (message.author.bot) return;
@@ -74,12 +74,11 @@ client.on("messageCreate", async (message) => {
     const m = Math.floor((uptime % 3600) / 60);
     const s = Math.floor(uptime % 60);
 
-    // total de registros (aproximação)
     const { count } = await supabase
       .from("followers")
       .select("*", { count: "exact", head: true });
 
-    await sent.edit(
+    return sent.edit(
 `📊 Status do Bot
 
 ⏱️ Latência: ${latency}ms
@@ -87,8 +86,6 @@ client.on("messageCreate", async (message) => {
 ⏳ Uptime: ${h}h ${m}m ${s}s
 👥 Registros no banco: ${count || 0}`
     );
-
-    return;
   }
 
   // 🔥 BANCO
@@ -149,7 +146,6 @@ client.on("messageCreate", async (message) => {
     return message.reply(`Você parou de seguir: ${nomeOriginal}`);
   }
 });
-
 
 // 🔥 WEBHOOK
 client.on("messageCreate", async (message) => {
