@@ -34,17 +34,42 @@ client.on("ready", () => {
   console.log("Bot online");
 });
 
-// comandos (!seguir / !parar / !banco)
+// comandos
 client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
   if (!message.content.startsWith(PREFIX)) return;
 
   const args = message.content.slice(PREFIX.length).trim().split(" ");
   const cmd = args.shift().toLowerCase();
-
   const userId = message.author.id;
 
-  // 🔥 COMANDO BANCO (ANTES DE EXIGIR NOME)
+  // 🔥 STATUS / PING
+  if (cmd === "status" || cmd === "ping") {
+
+    const sent = await message.reply("Calculando...");
+
+    const latency = sent.createdTimestamp - message.createdTimestamp;
+    const apiPing = Math.round(client.ws.ping);
+
+    const uptime = process.uptime();
+    const h = Math.floor(uptime / 3600);
+    const m = Math.floor((uptime % 3600) / 60);
+    const s = Math.floor(uptime % 60);
+
+    await sent.edit(
+`📊 Status do Bot
+
+⏱️ Latência: ${latency}ms
+🌐 API Ping: ${apiPing}ms
+⏳ Uptime: ${h}h ${m}m ${s}s
+👥 Usuários no banco: ${Object.keys(db).length}`
+    );
+
+    console.log("[STATUS CONSULTADO]");
+    return;
+  }
+
+  // 🔥 BANCO
   if (cmd === "banco") {
 
     if (Object.keys(db).length === 0) {
@@ -76,7 +101,7 @@ client.on("messageCreate", async (message) => {
     return;
   }
 
-  // resto dos comandos precisa de nome
+  // comandos com nome
   const nomeOriginal = args.join(" ").trim();
   if (!nomeOriginal) return message.reply("Informe o nome da obra.");
 
@@ -85,7 +110,6 @@ client.on("messageCreate", async (message) => {
   if (!db[userId]) db[userId] = [];
 
   if (cmd === "seguir") {
-
     if (!db[userId].includes(nome)) {
       db[userId].push(nome);
       salvarDB();
@@ -96,7 +120,6 @@ client.on("messageCreate", async (message) => {
   }
 
   if (cmd === "parar") {
-
     db[userId] = db[userId].filter(o => o !== nome);
     salvarDB();
 
@@ -107,7 +130,7 @@ client.on("messageCreate", async (message) => {
 });
 
 
-// 🔥 webhook → ping automático (SEM CARGOS)
+// 🔥 webhook → ping automático
 client.on("messageCreate", async (message) => {
 
   if (!message.webhookId) return;
@@ -128,9 +151,10 @@ client.on("messageCreate", async (message) => {
 
   console.log("[OBRA DETECTADA]:", nome);
 
+  // ✅ AGORA GUARDA IDS, NÃO STRING
   const seguidores = Object.entries(db)
     .filter(([id, obras]) => obras.includes(nome))
-    .map(([id]) => `<@${id}>`);
+    .map(([id]) => id);
 
   console.log("[SEGUIDORES]:", seguidores);
 
@@ -143,7 +167,10 @@ client.on("messageCreate", async (message) => {
       const grupo = seguidores.slice(i, i + chunkSize);
 
       await message.channel.send({
-        content: `${grupo.join(" ")} 📢 Atualização`,
+        content: `${grupo.map(id => `<@${id}>`).join(" ")} 📢 Atualização`,
+        allowedMentions: {
+          users: grupo
+        },
         embeds: [{
           description: content,
           color: 0xff69b4
