@@ -18,17 +18,25 @@ const supabase = createClient(
 const PREFIX = "!";
 const OWNER_ID = "1400164749655674953";
 
-console.log("Bot iniciando...");
+let logs = [];
+let ultimoErro = null;
+
+function addLog(msg) {
+  logs.push(msg);
+  if (logs.length > 20) logs.shift();
+  console.log(msg);
+}
 
 process.on("unhandledRejection", err => {
-  console.log("ERRO NÃO TRATADO:", err);
+  ultimoErro = err.message;
+  addLog("[ERRO] " + err.message);
 });
 
 client.on("ready", () => {
-  console.log("Bot online");
+  addLog("Bot online");
 });
 
-// 🔥 HELPERS SUPABASE
+// 🔥 HELPERS
 async function getSeguidores(nome) {
   const { data } = await supabase
     .from("followers")
@@ -39,9 +47,7 @@ async function getSeguidores(nome) {
 }
 
 async function seguir(userId, nome) {
-  await supabase.from("followers").insert([
-    { user_id: userId, obra: nome }
-  ]);
+  await supabase.from("followers").insert([{ user_id: userId, obra: nome }]);
 }
 
 async function parar(userId, nome) {
@@ -52,7 +58,7 @@ async function parar(userId, nome) {
     .eq("obra", nome);
 }
 
-// 🔥 BOT PRINCIPAL
+// 🔥 BOT
 client.on("messageCreate", async (message) => {
 
   if (message.author.bot) return;
@@ -61,23 +67,20 @@ client.on("messageCreate", async (message) => {
   const args = message.content.slice(PREFIX.length).trim().split(" ");
   const cmd = args.shift().toLowerCase();
   const userId = message.author.id;
-
   const isOwner = userId === OWNER_ID;
 
-  // 🔒 RESTART
+  // 🔒 restart
   if (cmd === "restart") {
     if (!isOwner) return message.reply("Sem permissão.");
-
     await message.reply("Reiniciando...");
     process.exit(0);
   }
 
-  // 🔒 STATUS
+  // 🔒 status / ping
   if (cmd === "status" || cmd === "ping") {
     if (!isOwner) return message.reply("Sem permissão.");
 
     const sent = await message.reply("Calculando...");
-
     const latency = sent.createdTimestamp - message.createdTimestamp;
     const apiPing = Math.round(client.ws.ping);
 
@@ -91,71 +94,126 @@ client.on("messageCreate", async (message) => {
       .select("*", { count: "exact", head: true });
 
     return sent.edit(
-`📊 Status do Bot
+`📊 Status
 
-⏱️ Latência: ${latency}ms
-🌐 API Ping: ${apiPing}ms
-⏳ Uptime: ${h}h ${m}m ${s}s
-👥 Registros no banco: ${count || 0}`
+Latência: ${latency}ms
+API: ${apiPing}ms
+Uptime: ${h}h ${m}m ${s}s
+Registros: ${count || 0}`
     );
   }
 
-  // 🔒 BANCO
+  // 🔒 banco
   if (cmd === "banco") {
     if (!isOwner) return message.reply("Sem permissão.");
 
-    const { data } = await supabase
-      .from("followers")
-      .select("user_id, obra");
+    const { data } = await supabase.from("followers").select("user_id, obra");
 
-    if (!data || data.length === 0) {
-      return message.reply("Banco vazio.");
-    }
+    if (!data?.length) return message.reply("Banco vazio.");
 
     const map = {};
+    data.forEach(r => {
+      if (!map[r.user_id]) map[r.user_id] = [];
+      map[r.user_id].push(r.obra);
+    });
 
-    for (const row of data) {
-      if (!map[row.user_id]) map[row.user_id] = [];
-      map[row.user_id].push(row.obra);
+    let texto = "📂 Banco:\n\n";
+    for (const [id, obras] of Object.entries(map)) {
+      texto += `<@${id}> → ${obras.join(", ")}\n`;
     }
 
-    let linhas = [];
-
-    for (const [uid, obras] of Object.entries(map)) {
-      linhas.push(`<@${uid}> → ${obras.join(", ")}`);
-    }
-
-    let atual = "📂 Banco de Dados:\n\n";
-
-    for (const linha of linhas) {
-      if ((atual + linha + "\n").length > 1900) {
-        await message.channel.send(atual);
-        atual = "";
-      }
-      atual += linha + "\n";
-    }
-
-    if (atual.length > 0) {
-      await message.channel.send(atual);
-    }
-
-    return;
+    return message.channel.send(texto.slice(0, 1900));
   }
 
-  // 🔥 seguir / parar (público)
+  // 🔒 debug
+  if (cmd === "debug") {
+    if (!isOwner) return message.reply("Sem permissão.");
+    return message.reply("Logs ativos: " + logs.length);
+  }
+
+  // 🔒 logs
+  if (cmd === "logs") {
+    if (!isOwner) return message.reply("Sem permissão.");
+    return message.channel.send("```" + logs.join("\n") + "```");
+  }
+
+  // 🔒 erro
+  if (cmd === "erro") {
+    if (!isOwner) return message.reply("Sem permissão.");
+    return message.reply(ultimoErro || "Sem erros.");
+  }
+
+  // 🔒 uptime
+  if (cmd === "uptime") {
+    if (!isOwner) return message.reply("Sem permissão.");
+    const t = process.uptime();
+    return message.reply(`Uptime: ${Math.floor(t)}s`);
+  }
+
+  // 🔥 minhas
+  if (cmd === "minhas") {
+    const { data } = await supabase
+      .from("followers")
+      .select("obra")
+      .eq("user_id", userId);
+
+    if (!data?.length) return message.reply("Você não segue nada.");
+
+    return message.reply("Você segue:\n" + data.map(d => d.obra).join(", "));
+  }
+
+  // 🔥 limpar
+  if (cmd === "limpar") {
+    await supabase.from("followers").delete().eq("user_id", userId);
+    return message.reply("Tudo removido.");
+  }
+
+  // 🔥 seguindo
+  if (cmd === "seguindo") {
+    const nome = args.join(" ").toLowerCase();
+
+    const { data } = await supabase
+      .from("followers")
+      .select("user_id")
+      .eq("obra", nome);
+
+    return message.reply(`Seguidores: ${data?.length || 0}`);
+  }
+
+  // 🔥 top
+  if (cmd === "top") {
+    const { data } = await supabase.from("followers").select("obra");
+
+    const count = {};
+    data.forEach(r => {
+      count[r.obra] = (count[r.obra] || 0) + 1;
+    });
+
+    const top = Object.entries(count)
+      .sort((a,b) => b[1] - a[1])
+      .slice(0, 5);
+
+    return message.reply(
+      "Top obras:\n" + top.map(([o,c]) => `${o} (${c})`).join("\n")
+    );
+  }
+
+  // 🔥 seguir / parar
   const nomeOriginal = args.join(" ").trim();
-  if (!nomeOriginal) return message.reply("Informe o nome da obra.");
+  if (!nomeOriginal) return message.reply("Informe o nome.");
 
   const nome = nomeOriginal.toLowerCase();
 
   if (cmd === "seguir") {
     await seguir(userId, nome);
-    return message.reply(`agora você segue: ${nomeOriginal}`);
+    addLog(`[SEGUIR] ${userId} -> ${nome}`);
+    return message.reply(`Seguindo: ${nomeOriginal}`);
   }
 
   if (cmd === "parar") {
     await parar(userId, nome);
-    return message.reply(`Você parou de seguir: ${nomeOriginal}`);
+    addLog(`[PARAR] ${userId} -X-> ${nome}`);
+    return message.reply(`Parou: ${nomeOriginal}`);
   }
 });
 
@@ -165,43 +223,27 @@ client.on("messageCreate", async (message) => {
   if (!message.webhookId) return;
 
   const content = message.content;
+  addLog("[WEBHOOK] recebido");
 
   const match = content.match(/Obra:\s*(.+)/i);
   if (!match) return;
 
-  const nomeOriginal = match[1].trim();
-  const nome = nomeOriginal.toLowerCase();
-
+  const nome = match[1].trim().toLowerCase();
   const seguidores = await getSeguidores(nome);
 
   await message.delete();
 
-  const chunkSize = 100;
-
   if (seguidores.length > 0) {
-
-    for (let i = 0; i < seguidores.length; i += chunkSize) {
-      const grupo = seguidores.slice(i, i + chunkSize);
-
-      await message.channel.send({
-        content: `${grupo.map(id => `<@${id}>`).join(" ")} 📢 Atualização`,
-        allowedMentions: {
-          users: grupo
-        },
-        embeds: [{
-          description: content,
-          color: 0xff69b4
-        }]
-      });
-    }
-
+    await message.channel.send({
+      content: seguidores.map(id => `<@${id}>`).join(" ") + " 📢 Atualização",
+      allowedMentions: { users: seguidores },
+      embeds: [{ description: content }]
+    });
+    addLog(`[ENVIO] ${nome} -> ${seguidores.length}`);
   } else {
     await message.channel.send({
       content: "📢 Atualização",
-      embeds: [{
-        description: content,
-        color: 0xff69b4
-      }]
+      embeds: [{ description: content }]
     });
   }
 });
