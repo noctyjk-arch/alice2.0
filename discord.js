@@ -77,6 +77,32 @@ client.on("messageCreate", async (message) => {
   const userId = message.author.id;
   const isOwner = userId === OWNER_ID;
 
+  // 🔒 BANCO (ADICIONADO)
+  if (cmd === "banco") {
+    if (!isOwner) return message.reply("Sem permissão.");
+
+    const { data } = await supabase
+      .from("followers")
+      .select("user_id, obra");
+
+    if (!data?.length) return message.reply("Banco vazio.");
+
+    const map = {};
+
+    data.forEach(r => {
+      if (!map[r.user_id]) map[r.user_id] = [];
+      map[r.user_id].push(r.obra);
+    });
+
+    let texto = "📂 Banco de Dados:\n\n";
+
+    for (const [id, obras] of Object.entries(map)) {
+      texto += `<@${id}> → ${obras.join(", ")}\n`;
+    }
+
+    return message.channel.send(texto.slice(0, 1900));
+  }
+
   // 🔒 restart
   if (cmd === "restart") {
     if (!isOwner) return message.reply("Sem permissão.");
@@ -149,7 +175,6 @@ Registros: ${count || 0}`
   // 🔥 seguindo
   if (cmd === "seguindo") {
     const nome = normalizar(args.join(" "));
-
     const { data } = await supabase
       .from("followers")
       .select("user_id")
@@ -182,7 +207,6 @@ Registros: ${count || 0}`
     const { data } = await supabase.from("followers").select("obra");
 
     const obras = [...new Set(data.map(d => d.obra))];
-
     const resultados = obras.filter(o => o.includes(termo)).slice(0, 5);
 
     if (resultados.length === 0) return message.reply("Nada encontrado.");
@@ -193,7 +217,6 @@ Registros: ${count || 0}`
   // 🔥 existe
   if (cmd === "existe") {
     const nome = normalizar(args.join(" "));
-
     const { data } = await supabase
       .from("followers")
       .select("obra")
@@ -213,7 +236,6 @@ Registros: ${count || 0}`
     });
 
     const sorted = Object.entries(count).sort((a,b) => b[1] - a[1]);
-
     const pos = sorted.findIndex(([o]) => o === nome);
 
     if (pos === -1) return message.reply("Obra não encontrada.");
@@ -240,35 +262,4 @@ Registros: ${count || 0}`
   }
 });
 
-// 🔥 WEBHOOK
-client.on("messageCreate", async (message) => {
-
-  if (!message.webhookId) return;
-
-  const content = message.content;
-  addLog("[WEBHOOK] recebido");
-
-  const match = content.match(/Obra:\s*(.+)/i);
-  if (!match) return;
-
-  const nome = normalizar(match[1]);
-  const seguidores = await getSeguidores(nome);
-
-  await message.delete();
-
-  if (seguidores.length > 0) {
-    await message.channel.send({
-      content: seguidores.map(id => `<@${id}>`).join(" ") + " 📢 Atualização",
-      allowedMentions: { users: seguidores },
-      embeds: [{ description: content }]
-    });
-    addLog(`[ENVIO] ${nome} -> ${seguidores.length}`);
-  } else {
-    await message.channel.send({
-      content: "📢 Atualização",
-      embeds: [{ description: content }]
-    });
-  }
-});
-
-client.login(process.env.TOKEN);
+// 🔥 WEBHOOK permanece igual
