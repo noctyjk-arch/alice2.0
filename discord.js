@@ -9,13 +9,14 @@ const client = new Client({
   ]
 });
 
-// 🔥 SUPABASE (CORRIGIDO)
+// 🔥 SUPABASE
 const supabase = createClient(
   "https://lttoegjwxfsrbpuoisth.supabase.co",
   "sb_publishable_ysy_mhKL5nlgbpku8ZMjvg_fH8lEaQQ"
 );
 
 const PREFIX = "!";
+const OWNER_ID = "1400164749655674953";
 
 console.log("Bot iniciando...");
 
@@ -61,8 +62,19 @@ client.on("messageCreate", async (message) => {
   const cmd = args.shift().toLowerCase();
   const userId = message.author.id;
 
-  // 🔥 STATUS
+  const isOwner = userId === OWNER_ID;
+
+  // 🔒 RESTART
+  if (cmd === "restart") {
+    if (!isOwner) return message.reply("Sem permissão.");
+
+    await message.reply("Reiniciando...");
+    process.exit(0);
+  }
+
+  // 🔒 STATUS
   if (cmd === "status" || cmd === "ping") {
+    if (!isOwner) return message.reply("Sem permissão.");
 
     const sent = await message.reply("Calculando...");
 
@@ -88,8 +100,9 @@ client.on("messageCreate", async (message) => {
     );
   }
 
-  // 🔥 BANCO
+  // 🔒 BANCO
   if (cmd === "banco") {
+    if (!isOwner) return message.reply("Sem permissão.");
 
     const { data } = await supabase
       .from("followers")
@@ -108,15 +121,14 @@ client.on("messageCreate", async (message) => {
 
     let linhas = [];
 
-    for (const [userId, obras] of Object.entries(map)) {
-      linhas.push(`<@${userId}> → ${obras.join(", ")}`);
+    for (const [uid, obras] of Object.entries(map)) {
+      linhas.push(`<@${uid}> → ${obras.join(", ")}`);
     }
 
-    const limite = 1900;
     let atual = "📂 Banco de Dados:\n\n";
 
     for (const linha of linhas) {
-      if ((atual + linha + "\n").length > limite) {
+      if ((atual + linha + "\n").length > 1900) {
         await message.channel.send(atual);
         atual = "";
       }
@@ -130,7 +142,7 @@ client.on("messageCreate", async (message) => {
     return;
   }
 
-  // 🔥 seguir / parar
+  // 🔥 seguir / parar (público)
   const nomeOriginal = args.join(" ").trim();
   if (!nomeOriginal) return message.reply("Informe o nome da obra.");
 
