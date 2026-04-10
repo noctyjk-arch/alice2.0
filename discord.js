@@ -37,6 +37,14 @@ client.on("ready", () => {
 });
 
 // 🔥 HELPERS
+function normalizar(str) {
+  return str
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
+
 async function getSeguidores(nome) {
   const { data } = await supabase
     .from("followers")
@@ -103,51 +111,21 @@ Registros: ${count || 0}`
     );
   }
 
-  // 🔒 banco
-  if (cmd === "banco") {
-    if (!isOwner) return message.reply("Sem permissão.");
+  // 🔥 ajuda
+  if (cmd === "ajuda") {
+    return message.reply(
+`Comandos:
 
-    const { data } = await supabase.from("followers").select("user_id, obra");
-
-    if (!data?.length) return message.reply("Banco vazio.");
-
-    const map = {};
-    data.forEach(r => {
-      if (!map[r.user_id]) map[r.user_id] = [];
-      map[r.user_id].push(r.obra);
-    });
-
-    let texto = "📂 Banco:\n\n";
-    for (const [id, obras] of Object.entries(map)) {
-      texto += `<@${id}> → ${obras.join(", ")}\n`;
-    }
-
-    return message.channel.send(texto.slice(0, 1900));
-  }
-
-  // 🔒 debug
-  if (cmd === "debug") {
-    if (!isOwner) return message.reply("Sem permissão.");
-    return message.reply("Logs ativos: " + logs.length);
-  }
-
-  // 🔒 logs
-  if (cmd === "logs") {
-    if (!isOwner) return message.reply("Sem permissão.");
-    return message.channel.send("```" + logs.join("\n") + "```");
-  }
-
-  // 🔒 erro
-  if (cmd === "erro") {
-    if (!isOwner) return message.reply("Sem permissão.");
-    return message.reply(ultimoErro || "Sem erros.");
-  }
-
-  // 🔒 uptime
-  if (cmd === "uptime") {
-    if (!isOwner) return message.reply("Sem permissão.");
-    const t = process.uptime();
-    return message.reply(`Uptime: ${Math.floor(t)}s`);
+!seguir <obra>
+!parar <obra>
+!minhas
+!limpar
+!seguindo <obra>
+!top
+!buscar <nome>
+!existe <obra>
+!rank <obra>`
+    );
   }
 
   // 🔥 minhas
@@ -170,7 +148,7 @@ Registros: ${count || 0}`
 
   // 🔥 seguindo
   if (cmd === "seguindo") {
-    const nome = args.join(" ").toLowerCase();
+    const nome = normalizar(args.join(" "));
 
     const { data } = await supabase
       .from("followers")
@@ -198,11 +176,56 @@ Registros: ${count || 0}`
     );
   }
 
+  // 🔥 buscar
+  if (cmd === "buscar") {
+    const termo = normalizar(args.join(" "));
+    const { data } = await supabase.from("followers").select("obra");
+
+    const obras = [...new Set(data.map(d => d.obra))];
+
+    const resultados = obras.filter(o => o.includes(termo)).slice(0, 5);
+
+    if (resultados.length === 0) return message.reply("Nada encontrado.");
+
+    return message.reply("Resultados:\n" + resultados.join("\n"));
+  }
+
+  // 🔥 existe
+  if (cmd === "existe") {
+    const nome = normalizar(args.join(" "));
+
+    const { data } = await supabase
+      .from("followers")
+      .select("obra")
+      .eq("obra", nome);
+
+    return message.reply(data?.length ? "Existe no banco." : "Não encontrado.");
+  }
+
+  // 🔥 rank
+  if (cmd === "rank") {
+    const nome = normalizar(args.join(" "));
+    const { data } = await supabase.from("followers").select("obra");
+
+    const count = {};
+    data.forEach(r => {
+      count[r.obra] = (count[r.obra] || 0) + 1;
+    });
+
+    const sorted = Object.entries(count).sort((a,b) => b[1] - a[1]);
+
+    const pos = sorted.findIndex(([o]) => o === nome);
+
+    if (pos === -1) return message.reply("Obra não encontrada.");
+
+    return message.reply(`${nome} está em #${pos + 1} com ${count[nome]} seguidores`);
+  }
+
   // 🔥 seguir / parar
   const nomeOriginal = args.join(" ").trim();
   if (!nomeOriginal) return message.reply("Informe o nome.");
 
-  const nome = nomeOriginal.toLowerCase();
+  const nome = normalizar(nomeOriginal);
 
   if (cmd === "seguir") {
     await seguir(userId, nome);
@@ -228,7 +251,7 @@ client.on("messageCreate", async (message) => {
   const match = content.match(/Obra:\s*(.+)/i);
   if (!match) return;
 
-  const nome = match[1].trim().toLowerCase();
+  const nome = normalizar(match[1]);
   const seguidores = await getSeguidores(nome);
 
   await message.delete();
