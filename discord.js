@@ -223,7 +223,7 @@ Registros: ${count || 0}`
 
 });
 
-// 🔥 WEBHOOK permanece igual
+// 🔥 WEBHOOK
 client.on("messageCreate", async (message) => {
 
   if (!message.webhookId) return;
