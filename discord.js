@@ -79,6 +79,11 @@ client.on("messageCreate", async (message) => {
     const userId = message.author.id;
     const isOwner = userId === OWNER_ID;
 
+    // 🔥 COMANDO MEME
+    if (message.content.toLowerCase() === "!e o que sobra pro beta?") {
+      return message.reply("não sobra nada pro beta, brutal");
+    }
+
     // 🔒 BANCO
     if (cmd === "banco") {
       if (!isOwner) return message.reply("Sem permissão.");
@@ -218,7 +223,7 @@ Registros: ${count || 0}`
 
 });
 
-// 🔥 WEBHOOK
+// 🔥 WEBHOOK permanece igual
 client.on("messageCreate", async (message) => {
 
   if (!message.webhookId) return;
