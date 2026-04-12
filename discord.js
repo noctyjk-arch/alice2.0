@@ -79,6 +79,11 @@ client.on("messageCreate", async (message) => {
     const userId = message.author.id;
     const isOwner = userId === OWNER_ID;
 
+    // ❗ comando vazio ou inválido
+    if (!cmd) {
+      return message.reply("Comando não reconhecido ou não existe.");
+    }
+
     // 🔥 COMANDO MEME
     if (message.content.toLowerCase() === "!e o que sobra pro beta?") {
       return message.reply("não sobra nada pro beta, brutal");
@@ -198,23 +203,30 @@ Registros: ${count || 0}`
       );
     }
 
-    // 🔥 seguir / parar
-    const nomeOriginal = args.join(" ").trim();
-    if (!nomeOriginal) return message.reply("Informe o nome.");
-
-    const nome = normalizar(nomeOriginal);
-
+    // 🔥 seguir
     if (cmd === "seguir") {
+      const nomeOriginal = args.join(" ").trim();
+      if (!nomeOriginal) return message.reply("Informe o nome da obra.");
+
+      const nome = normalizar(nomeOriginal);
       await seguir(userId, nome);
       addLog(`[SEGUIR] ${userId} -> ${nome}`);
       return message.reply(`Seguindo: ${nomeOriginal}`);
     }
 
+    // 🔥 parar
     if (cmd === "parar") {
+      const nomeOriginal = args.join(" ").trim();
+      if (!nomeOriginal) return message.reply("Informe o nome da obra.");
+
+      const nome = normalizar(nomeOriginal);
       await parar(userId, nome);
       addLog(`[PARAR] ${userId} -X-> ${nome}`);
       return message.reply(`Parou: ${nomeOriginal}`);
     }
+
+    // ❗ fallback final
+    return message.reply("Comando não reconhecido ou não existe.");
 
   } catch (err) {
     addLog("[CRASH] " + err.message);
