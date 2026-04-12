@@ -45,6 +45,20 @@ function normalizar(str) {
     .trim();
 }
 
+// ✅ NOVO: garante que a obra existe no catálogo
+async function garantirObra(nome) {
+  const { data } = await supabase
+    .from("works")
+    .select("name")
+    .eq("name", nome)
+    .maybeSingle();
+
+  if (!data) {
+    await supabase.from("works").insert([{ name: nome }]);
+    addLog(`[CATALOGO] nova obra adicionada: ${nome}`);
+  }
+}
+
 async function getSeguidores(nome) {
   const { data } = await supabase
     .from("followers")
@@ -79,12 +93,11 @@ client.on("messageCreate", async (message) => {
     const userId = message.author.id;
     const isOwner = userId === OWNER_ID;
 
-    // ❗ fallback global para comando vazio
     if (!cmd) {
       return message.reply("Comando não reconhecido ou não existe.");
     }
 
-    // 🔥 MENU DE AJUDA
+    // 🔥 AJUDA
     if (cmd === "ajuda") {
       return message.reply(
 `📌 COMANDOS
@@ -105,7 +118,7 @@ client.on("messageCreate", async (message) => {
       );
     }
 
-    // 🔥 MEME FIXO
+    // 🔥 MEME
     if (message.content.toLowerCase() === "!e o que sobra pro beta?") {
       return message.reply("não sobra nada pro beta, brutal");
     }
@@ -114,18 +127,11 @@ client.on("messageCreate", async (message) => {
     if (cmd === "banco") {
       if (!isOwner) return message.reply("Sem permissão.");
 
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("followers")
         .select("user_id, obra");
 
-      if (error) {
-        addLog("[ERRO BANCO] " + error.message);
-        return message.reply("Erro ao acessar banco.");
-      }
-
-      if (!data || data.length === 0) {
-        return message.reply("Banco vazio.");
-      }
+      if (!data?.length) return message.reply("Banco vazio.");
 
       const map = {};
 
@@ -143,14 +149,7 @@ client.on("messageCreate", async (message) => {
       return message.channel.send(texto.slice(0, 1900));
     }
 
-    // 🔒 restart
-    if (cmd === "restart") {
-      if (!isOwner) return message.reply("Sem permissão.");
-      await message.reply("Reiniciando...");
-      process.exit(0);
-    }
-
-    // 🔒 status
+    // 🔒 STATUS
     if (cmd === "status" || cmd === "ping") {
       if (!isOwner) return message.reply("Sem permissão.");
 
@@ -158,26 +157,10 @@ client.on("messageCreate", async (message) => {
       const latency = sent.createdTimestamp - message.createdTimestamp;
       const apiPing = Math.round(client.ws.ping);
 
-      const uptime = process.uptime();
-      const h = Math.floor(uptime / 3600);
-      const m = Math.floor((uptime % 3600) / 60);
-      const s = Math.floor(uptime % 60);
-
-      const { count } = await supabase
-        .from("followers")
-        .select("*", { count: "exact", head: true });
-
-      return sent.edit(
-`📊 Status
-
-Latência: ${latency}ms
-API: ${apiPing}ms
-Uptime: ${h}h ${m}m ${s}s
-Registros: ${count || 0}`
-      );
+      return sent.edit(`Latência: ${latency}ms | API: ${apiPing}ms`);
     }
 
-    // 🔥 seguir
+    // 🔥 SEGUIR
     if (cmd === "seguir") {
       const nomeOriginal = args.join(" ").trim();
       if (!nomeOriginal) {
@@ -185,12 +168,17 @@ Registros: ${count || 0}`
       }
 
       const nome = normalizar(nomeOriginal);
+
+      // ✅ AQUI entra o auto-cadastro
+      await garantirObra(nome);
+
       await seguir(userId, nome);
       addLog(`[SEGUIR] ${userId} -> ${nome}`);
+
       return message.reply(`Seguindo: ${nomeOriginal}`);
     }
 
-    // 🔥 parar
+    // 🔥 PARAR
     if (cmd === "parar") {
       const nomeOriginal = args.join(" ").trim();
       if (!nomeOriginal) {
@@ -198,8 +186,10 @@ Registros: ${count || 0}`
       }
 
       const nome = normalizar(nomeOriginal);
+
       await parar(userId, nome);
       addLog(`[PARAR] ${userId} -X-> ${nome}`);
+
       return message.reply(`Parou: ${nomeOriginal}`);
     }
 
