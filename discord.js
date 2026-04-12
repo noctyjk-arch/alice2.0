@@ -11,7 +11,7 @@ const client = new Client({
 
 const supabase = createClient(
   "https://lttoegjwxfsrbpuoisth.supabase.co",
-  "sb_publishable_ysy_mhKL5nlgbpku8ZMjvg_fH8lEaQQ"
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx0dG9lZ2p3eGZzcmJwdW9pc3RoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTc2MzcyOCwiZXhwIjoyMDkxMzM5NzI4fQ.YzCj_xfcFRX7eNIzLb7MvGv7c7vjG5kv2GTXp61-XVg"
 );
 
 const PREFIX = "!";
@@ -19,6 +19,7 @@ const OWNER_ID = "1400164749655674953";
 
 let logs = [];
 let ultimoErro = null;
+const cooldown = new Map();
 
 function addLog(msg) {
   logs.push(msg);
@@ -40,6 +41,7 @@ function normalizar(str) {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
@@ -73,7 +75,7 @@ function similar(a, b) {
   }
 
   const dist = levenshtein(a, b);
-  const limite = Math.floor(Math.max(a.length, b.length) * 0.4);
+  const limite = Math.floor(Math.max(a.length, b.length) * 0.2);
 
   return dist <= limite;
 }
@@ -81,7 +83,7 @@ function similar(a, b) {
 async function encontrarObra(nomeInput) {
   const { data } = await supabase.from("works").select("name");
 
-  if (!data || data.length === 0) return null;
+  if (!data) return null;
 
   const nome = normalizar(nomeInput);
 
@@ -96,16 +98,14 @@ async function encontrarObra(nomeInput) {
 }
 
 async function garantirObra(nomeInput) {
-  const nomeNormalizado = normalizar(nomeInput);
+  const nome = normalizar(nomeInput);
 
-  const existente = await encontrarObra(nomeNormalizado);
-
+  const existente = await encontrarObra(nome);
   if (existente) return existente;
 
-  await supabase.from("works").insert([{ name: nomeNormalizado }]);
-  addLog(`[CATALOGO] nova obra: ${nomeNormalizado}`);
-
-  return nomeNormalizado;
+  await supabase.from("works").insert([{ name: nome }]);
+  addLog(`[CATALOGO] nova obra: ${nome}`);
+  return nome;
 }
 
 async function getSeguidores(nome) {
@@ -117,8 +117,22 @@ async function getSeguidores(nome) {
   return data ? data.map(u => u.user_id) : [];
 }
 
+async function jaSegue(userId, nome) {
+  const { data } = await supabase
+    .from("followers")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("obra", nome)
+    .maybeSingle();
+
+  return !!data;
+}
+
 async function seguir(userId, nome) {
+  if (await jaSegue(userId, nome)) return false;
+
   await supabase.from("followers").insert([{ user_id: userId, obra: nome }]);
+  return true;
 }
 
 async function parar(userId, nome) {
@@ -133,6 +147,12 @@ client.on("messageCreate", async (message) => {
   try {
     if (message.author.bot) return;
     if (!message.content.startsWith(PREFIX)) return;
+
+    const now = Date.now();
+    if (cooldown.has(message.author.id)) {
+      if (now - cooldown.get(message.author.id) < 2000) return;
+    }
+    cooldown.set(message.author.id, now);
 
     const args = message.content.slice(PREFIX.length).trim().split(" ");
     const cmd = (args.shift() || "").toLowerCase();
@@ -202,22 +222,25 @@ client.on("messageCreate", async (message) => {
 
     if (cmd === "seguir") {
       const nomeOriginal = args.join(" ").trim();
-      if (!nomeOriginal) {
-        return message.reply("Comando não reconhecido ou não existe.");
+
+      if (!nomeOriginal || nomeOriginal.length < 2 || nomeOriginal.length > 100) {
+        return message.reply("Nome inválido.");
       }
 
-      let nome = await garantirObra(nomeOriginal);
+      const nome = await garantirObra(nomeOriginal);
 
-      await seguir(userId, nome);
+      const ok = await seguir(userId, nome);
+      if (!ok) return message.reply("Você já segue essa obra.");
+
       addLog(`[SEGUIR] ${userId} -> ${nome}`);
-
       return message.reply(`Seguindo: ${nome}`);
     }
 
     if (cmd === "parar") {
       const nomeOriginal = args.join(" ").trim();
-      if (!nomeOriginal) {
-        return message.reply("Comando não reconhecido ou não existe.");
+
+      if (!nomeOriginal || nomeOriginal.length < 2 || nomeOriginal.length > 100) {
+        return message.reply("Nome inválido.");
       }
 
       const nome = await encontrarObra(nomeOriginal) || normalizar(nomeOriginal);
@@ -244,7 +267,7 @@ client.on("messageCreate", async (message) => {
   const match = content.match(/Obra:\s*(.+)/i);
   if (!match) return;
 
-  const nomeFinal = await garantirObra(match[1]); // 🔥 salva e corrige
+  const nomeFinal = await garantirObra(match[1]);
 
   const seguidores = await getSeguidores(nomeFinal);
 
