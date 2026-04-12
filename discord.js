@@ -9,7 +9,6 @@ const client = new Client({
   ]
 });
 
-// 🔥 SUPABASE
 const supabase = createClient(
   "https://lttoegjwxfsrbpuoisth.supabase.co",
   "sb_publishable_ysy_mhKL5nlgbpku8ZMjvg_fH8lEaQQ"
@@ -36,7 +35,6 @@ client.on("ready", () => {
   addLog("Bot online");
 });
 
-// 🔥 HELPERS
 function normalizar(str) {
   return str
     .toLowerCase()
@@ -45,18 +43,42 @@ function normalizar(str) {
     .trim();
 }
 
-// ✅ NOVO: garante que a obra existe no catálogo
-async function garantirObra(nome) {
-  const { data } = await supabase
-    .from("works")
-    .select("name")
-    .eq("name", nome)
-    .maybeSingle();
+function similar(a, b) {
+  if (a.includes(b) || b.includes(a)) return true;
 
-  if (!data) {
-    await supabase.from("works").insert([{ name: nome }]);
-    addLog(`[CATALOGO] nova obra adicionada: ${nome}`);
+  let erros = 0;
+  for (let i = 0; i < Math.min(a.length, b.length); i++) {
+    if (a[i] !== b[i]) erros++;
   }
+
+  return erros <= 3;
+}
+
+async function encontrarObra(nomeInput) {
+  const { data } = await supabase.from("works").select("name");
+
+  if (!data || data.length === 0) return null;
+
+  const nome = normalizar(nomeInput);
+
+  for (const w of data) {
+    const base = normalizar(w.name);
+
+    if (base === nome) return w.name;
+    if (similar(base, nome)) return w.name;
+  }
+
+  return null;
+}
+
+async function garantirObra(nome) {
+  const existente = await encontrarObra(nome);
+
+  if (existente) return existente;
+
+  await supabase.from("works").insert([{ name: nome }]);
+  addLog(`[CATALOGO] nova obra: ${nome}`);
+  return nome;
 }
 
 async function getSeguidores(nome) {
@@ -80,11 +102,8 @@ async function parar(userId, nome) {
     .eq("obra", nome);
 }
 
-// 🔥 BOT
 client.on("messageCreate", async (message) => {
-
   try {
-
     if (message.author.bot) return;
     if (!message.content.startsWith(PREFIX)) return;
 
@@ -97,12 +116,10 @@ client.on("messageCreate", async (message) => {
       return message.reply("Comando não reconhecido ou não existe.");
     }
 
-    // 🔥 AJUDA
     if (cmd === "ajuda") {
       return message.reply(
 `📌 COMANDOS
 
-👤 Usuário:
 !seguir <obra>
 !parar <obra>
 !minhas
@@ -110,7 +127,6 @@ client.on("messageCreate", async (message) => {
 !seguindo <obra>
 !top
 
-⚙️ Sistema:
 !status
 !ping
 !banco (admin)
@@ -118,12 +134,10 @@ client.on("messageCreate", async (message) => {
       );
     }
 
-    // 🔥 MEME
     if (message.content.toLowerCase() === "!e o que sobra pro beta?") {
       return message.reply("não sobra nada pro beta, brutal");
     }
 
-    // 🔒 BANCO
     if (cmd === "banco") {
       if (!isOwner) return message.reply("Sem permissão.");
 
@@ -140,7 +154,7 @@ client.on("messageCreate", async (message) => {
         map[r.user_id].push(r.obra);
       });
 
-      let texto = "📂 Banco de Dados:\n\n";
+      let texto = "📂 Banco:\n\n";
 
       for (const [id, obras] of Object.entries(map)) {
         texto += `<@${id}> → ${obras.join(", ")}\n`;
@@ -149,48 +163,42 @@ client.on("messageCreate", async (message) => {
       return message.channel.send(texto.slice(0, 1900));
     }
 
-    // 🔒 STATUS
     if (cmd === "status" || cmd === "ping") {
       if (!isOwner) return message.reply("Sem permissão.");
 
-      const sent = await message.reply("Calculando...");
+      const sent = await message.reply("...");
       const latency = sent.createdTimestamp - message.createdTimestamp;
       const apiPing = Math.round(client.ws.ping);
 
       return sent.edit(`Latência: ${latency}ms | API: ${apiPing}ms`);
     }
 
-    // 🔥 SEGUIR
     if (cmd === "seguir") {
       const nomeOriginal = args.join(" ").trim();
       if (!nomeOriginal) {
         return message.reply("Comando não reconhecido ou não existe.");
       }
 
-      const nome = normalizar(nomeOriginal);
-
-      // ✅ AQUI entra o auto-cadastro
-      await garantirObra(nome);
+      let nome = await garantirObra(nomeOriginal);
 
       await seguir(userId, nome);
       addLog(`[SEGUIR] ${userId} -> ${nome}`);
 
-      return message.reply(`Seguindo: ${nomeOriginal}`);
+      return message.reply(`Seguindo: ${nome}`);
     }
 
-    // 🔥 PARAR
     if (cmd === "parar") {
       const nomeOriginal = args.join(" ").trim();
       if (!nomeOriginal) {
         return message.reply("Comando não reconhecido ou não existe.");
       }
 
-      const nome = normalizar(nomeOriginal);
+      const nome = await encontrarObra(nomeOriginal) || normalizar(nomeOriginal);
 
       await parar(userId, nome);
       addLog(`[PARAR] ${userId} -X-> ${nome}`);
 
-      return message.reply(`Parou: ${nomeOriginal}`);
+      return message.reply(`Parou: ${nome}`);
     }
 
     return message.reply("Comando não reconhecido ou não existe.");
@@ -199,16 +207,12 @@ client.on("messageCreate", async (message) => {
     addLog("[CRASH] " + err.message);
     message.reply("Erro interno.");
   }
-
 });
 
-// 🔥 WEBHOOK
 client.on("messageCreate", async (message) => {
-
   if (!message.webhookId) return;
 
   const content = message.content;
-  addLog("[WEBHOOK] recebido");
 
   const match = content.match(/Obra:\s*(.+)/i);
   if (!match) return;
