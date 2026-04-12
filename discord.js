@@ -75,16 +75,37 @@ client.on("messageCreate", async (message) => {
     if (!message.content.startsWith(PREFIX)) return;
 
     const args = message.content.slice(PREFIX.length).trim().split(" ");
-    const cmd = args.shift().toLowerCase();
+    const cmd = (args.shift() || "").toLowerCase();
     const userId = message.author.id;
     const isOwner = userId === OWNER_ID;
 
-    // ❗ comando vazio ou inválido
+    // ❗ fallback global para comando vazio
     if (!cmd) {
       return message.reply("Comando não reconhecido ou não existe.");
     }
 
-    // 🔥 COMANDO MEME
+    // 🔥 MENU DE AJUDA
+    if (cmd === "ajuda") {
+      return message.reply(
+`📌 COMANDOS
+
+👤 Usuário:
+!seguir <obra>
+!parar <obra>
+!minhas
+!limpar
+!seguindo <obra>
+!top
+
+⚙️ Sistema:
+!status
+!ping
+!banco (admin)
+!restart (admin)`
+      );
+    }
+
+    // 🔥 MEME FIXO
     if (message.content.toLowerCase() === "!e o que sobra pro beta?") {
       return message.reply("não sobra nada pro beta, brutal");
     }
@@ -156,57 +177,12 @@ Registros: ${count || 0}`
       );
     }
 
-    // 🔥 minhas
-    if (cmd === "minhas") {
-      const { data } = await supabase
-        .from("followers")
-        .select("obra")
-        .eq("user_id", userId);
-
-      if (!data?.length) return message.reply("Você não segue nada.");
-
-      return message.reply("Você segue:\n" + data.map(d => d.obra).join(", "));
-    }
-
-    // 🔥 limpar
-    if (cmd === "limpar") {
-      await supabase.from("followers").delete().eq("user_id", userId);
-      return message.reply("Tudo removido.");
-    }
-
-    // 🔥 seguindo
-    if (cmd === "seguindo") {
-      const nome = normalizar(args.join(" "));
-      const { data } = await supabase
-        .from("followers")
-        .select("user_id")
-        .eq("obra", nome);
-
-      return message.reply(`Seguidores: ${data?.length || 0}`);
-    }
-
-    // 🔥 top
-    if (cmd === "top") {
-      const { data } = await supabase.from("followers").select("obra");
-
-      const count = {};
-      data.forEach(r => {
-        count[r.obra] = (count[r.obra] || 0) + 1;
-      });
-
-      const top = Object.entries(count)
-        .sort((a,b) => b[1] - a[1])
-        .slice(0, 5);
-
-      return message.reply(
-        "Top obras:\n" + top.map(([o,c]) => `${o} (${c})`).join("\n")
-      );
-    }
-
     // 🔥 seguir
     if (cmd === "seguir") {
       const nomeOriginal = args.join(" ").trim();
-      if (!nomeOriginal) return message.reply("Informe o nome da obra.");
+      if (!nomeOriginal) {
+        return message.reply("Comando não reconhecido ou não existe.");
+      }
 
       const nome = normalizar(nomeOriginal);
       await seguir(userId, nome);
@@ -217,7 +193,9 @@ Registros: ${count || 0}`
     // 🔥 parar
     if (cmd === "parar") {
       const nomeOriginal = args.join(" ").trim();
-      if (!nomeOriginal) return message.reply("Informe o nome da obra.");
+      if (!nomeOriginal) {
+        return message.reply("Comando não reconhecido ou não existe.");
+      }
 
       const nome = normalizar(nomeOriginal);
       await parar(userId, nome);
@@ -225,7 +203,6 @@ Registros: ${count || 0}`
       return message.reply(`Parou: ${nomeOriginal}`);
     }
 
-    // ❗ fallback final
     return message.reply("Comando não reconhecido ou não existe.");
 
   } catch (err) {
@@ -257,7 +234,6 @@ client.on("messageCreate", async (message) => {
       allowedMentions: { users: seguidores },
       embeds: [{ description: content }]
     });
-    addLog(`[ENVIO] ${nome} -> ${seguidores.length}`);
   } else {
     await message.channel.send({
       content: "📢 Atualização",
