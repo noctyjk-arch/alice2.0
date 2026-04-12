@@ -43,7 +43,6 @@ function normalizar(str) {
     .trim();
 }
 
-// 🔥 AQUI FOI CORRIGIDO
 function similar(a, b) {
   a = normalizar(a);
   b = normalizar(b);
@@ -96,14 +95,17 @@ async function encontrarObra(nomeInput) {
   return null;
 }
 
-async function garantirObra(nome) {
-  const existente = await encontrarObra(nome);
+async function garantirObra(nomeInput) {
+  const nomeNormalizado = normalizar(nomeInput);
+
+  const existente = await encontrarObra(nomeNormalizado);
 
   if (existente) return existente;
 
-  await supabase.from("works").insert([{ name: nome }]);
-  addLog(`[CATALOGO] nova obra: ${nome}`);
-  return nome;
+  await supabase.from("works").insert([{ name: nomeNormalizado }]);
+  addLog(`[CATALOGO] nova obra: ${nomeNormalizado}`);
+
+  return nomeNormalizado;
 }
 
 async function getSeguidores(nome) {
@@ -242,8 +244,9 @@ client.on("messageCreate", async (message) => {
   const match = content.match(/Obra:\s*(.+)/i);
   if (!match) return;
 
-  const nome = normalizar(match[1]);
-  const seguidores = await getSeguidores(nome);
+  const nomeFinal = await garantirObra(match[1]); // 🔥 salva e corrige
+
+  const seguidores = await getSeguidores(nomeFinal);
 
   await message.delete();
 
